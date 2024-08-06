@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import os
 import re
 from aiogram import Bot, Dispatcher, F
@@ -13,8 +14,10 @@ from PIL import Image
 from aiogram.filters import CommandStart
 from admin import TOKEN
 from contrast import imgCorrect
+from database import *
+from decryption import create_sample, delTempFile, detectCategory, getPrice
 from ocr_img import ocr_my_img, split_image
-from text import cards
+# from database import cards
 bot = Bot(TOKEN)
 dp = Dispatcher()
 
@@ -59,10 +62,11 @@ async def cmd_started(message: Message):
 #             await bot.send_photo(ID, value)
 
 
-# @dp.message(F.text)
-# async def cmd_problem(message: Message):
-#         print(message.text.split())
-
+@dp.message(F.text)
+async def cmd_problem(message: Message):
+    print("LOADING")
+    print(cards)
+    print(cardsView)
 
 # @dp.message(F.text == "Контакты")
 # async def cmd_contact(message: Message):
@@ -75,8 +79,9 @@ async def cmd_started(message: Message):
 
 @dp.message(F.document)
 async def photo_handler(message: Message):
+    localCards=copy.deepcopy(cards)
     file_format = message.document.mime_type.split("/")[-1]
-
+    print("START")
     await message.answer("Loading...\Загрузка...");
     file_id = message.document.file_id
     file = await bot.get_file(file_id) 
@@ -85,62 +90,31 @@ async def photo_handler(message: Message):
     imgCorrect(filename)
     left_file,right_file = split_image(filename)
     left_text = ocr_my_img(left_file)
-    # right_text = ocr_my_img(right_file)
-    # print(left_text.split())
-    algo_decoded(left_text.split())
-    print('\n\n')
-    # right_text = ocr_my_img(right_file)
-    # print(right_text)
+    right_text = ocr_my_img(right_file)
+    localCards,leftPrice= getPrice(vtext=left_text.split(),relustCards=localCards,left=True)
+    localCards,rightPrice=getPrice(vtext=right_text.split(),relustCards=localCards)
+    category = detectCategory(localCards)
+    leftCategory=f'{category}_L'
+    rightCategory=f'{category}_R'
+    cardValue1 = copy.deepcopy(cardsView[f'{category}_L'])
+    cardValue2 = copy.deepcopy(cardsView[f'{category}_R'])
+    cardValue = cardValue1 + cardValue2
+    print(cardValue)
+    create_sample(category=category,leftCards=localCards[leftCategory],rightCards=localCards[rightCategory],leftPrice=leftPrice,rightPrice=rightPrice,leftCardSample=cardValue1,rightCardSample=cardValue2)
+    await message.answer(category)
+    delTempFile(filename)
 
-# Пример использования
-    # split_image('your_image.png')
-
-    # await message.answer(text);
-    if os.path.isfile(filename): 
-        os.remove(filename) 
-        print("success") 
-    else:
-        print("File doesn't exists!")
-
+    
 
 
 
 
 
-def algo_decoded(text):
-   localCards=cards
-   delsymbols = ['@', '€','tokens','hour','per','pairs','Profit']
-   text = [i for i in text if i not in delsymbols]
-   print(text)
-   
-   counters = [0 for _ in range(len(localCards))]
-   profit_and_price = []
-    # \d+ соответствует одной или более цифрам, K - это буква "K"
-   print('\n\n')
-   for i in range(len(text)):
-       if (len(text[i])>1):
-          if (re.search(r'\d+[KM]$', text[i],re.IGNORECASE)):
-              text[i]=text[i].lower()
-              if ('k' in text[i]):
-                  text[i]=text[i].replace('k','')
-                  if (text[i].isdigit()):
-                      profit_and_price.append(float(text[i])*1000)
-                  else:
-                      profit_and_price.append(text[i]+'no')
-              elif ('m' in text[i]):
-                  text[i]=text[i].replace('m','')
-                  if (text[i].isdigit()):
-                      profit_and_price.append(float(text[i])*1000000)
-                  else:
-                      profit_and_price.append(text[i]+'no')
-       for j in range(len(localCards)):
-          for k in range(len(localCards[j])):
-              if (text[i] in localCards[j][k]):
-                  print(localCards[j][k])
-                  counters[j] +=1
-                #   j[k]= "✅"+j[k]
-   print(counters)
-   print(counters.index(max(counters)))
+
+
+        
+
+      
 #    for i in range(len(localCards[counters.index(max(counters))])):                
         
 # @dp.message(F.text)
@@ -168,6 +142,8 @@ def algo_decoded(text):
 
 
 async def main():
+    openCards()
+    printCards()
     await dp.start_polling(bot)
 
 
